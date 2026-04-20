@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Brawl Stars ULTRA | Пассивки, скины за монеты, 12 бойцов, 10 карт</title>
+    <style>
+        * { user-select: none; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; min-height: 100vh; background: linear-gradient(145deg, #0a2f2a 0%, #051f1b 100%); display: flex; justify-content: center; align-items: center; font-family: 'Segoe UI', 'Courier New', monospace; overflow: hidden; }
+        .game-container { background: #1e2a2a; border-radius: 48px; padding: 16px 24px 24px 24px; box-shadow: 0 20px 35px rgba(0,0,0,0.5); }
+        canvas { display: block; margin: 0 auto; border-radius: 28px; box-shadow: 0 0 0 4px #f7c56e; cursor: crosshair; }
+        .info-panel { display: flex; justify-content: space-between; align-items: center; background: #2c1e12e6; backdrop-filter: blur(8px); border-radius: 60px; padding: 8px 24px; margin-bottom: 18px; color: #ffefcf; gap: 20px; flex-wrap: wrap; }
+        .stat { display: flex; align-items: center; gap: 12px; background: #00000066; padding: 6px 20px; border-radius: 40px; font-weight: bold; font-size: 1.2rem; }
+        .buttons { display: flex; gap: 12px; }
+        .btn { background: #efb87e; border: none; font-weight: bold; font-size: 0.9rem; padding: 6px 16px; border-radius: 60px; color: #2b1a0a; cursor: pointer; font-family: inherit; transition: 0.1s linear; box-shadow: 0 4px 0 #6b3f1c; }
+        .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #6b3f1c; }
+        .menu-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(12px); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .menu-card { background: #fae67a; padding: 25px; border-radius: 64px; width: 520px; max-height: 85vh; overflow-y: auto; text-align: center; color: #311d09; box-shadow: 0 20px 30px black; }
+        .brawler-list, .skin-list, .map-list, .achievements-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 15px 0; max-height: 350px; overflow-y: auto; }
+        .brawler-card, .skin-card, .map-card, .achievement-card { background: #ffd966; padding: 6px; border-radius: 48px; cursor: pointer; font-size: 0.8rem; transition: 0.05s linear; }
+        .brawler-card.selected, .skin-card.selected, .map-card.selected { background: #ffa047; box-shadow: 0 0 0 3px gold; }
+        .brawler-card.locked, .skin-card.locked { opacity: 0.6; background: #aa8a4a; cursor: not-allowed; }
+        .upgrade-area, .skin-shop { background: #f0cf87; border-radius: 32px; padding: 12px; margin-top: 15px; }
+        .buff-timer, .ultra-charge { background: #2b2b1f; color: #ffd966; padding: 4px 12px; border-radius: 40px; font-size: 0.8rem; position: fixed; bottom: 20px; font-weight: bold; pointer-events: none; }
+        .buff-timer { left: 50%; transform: translateX(-50%); }
+        .ultra-charge { right: 20px; bottom: 20px; background: #4a2e2e; color: #ffaa66; }
+        ::-webkit-scrollbar { width: 6px; }
+        .daily-reward { background: #ffcc44; padding: 8px; border-radius: 40px; margin-top: 10px; font-weight: bold; }
+        .passive-icon { font-size: 0.7rem; background: #2c2c2c; border-radius: 20px; padding: 2px 8px; display: inline-block; margin-left: 6px; }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <div class="info-panel">
+        <div class="stat">⭐ <span id="gemsValue">0</span></div>
+        <div class="stat">🪙 <span id="coinsValue">0</span></div>
+        <div class="stat">🏆 <span id="brawlerName"></span> Lv.<span id="levelValue"></span> <span id="passiveName" class="passive-icon"></span></div>
+        <div class="stat">🗺️ <span id="mapName">Лес</span></div>
+        <div class="buttons">
+            <button class="btn" id="menuBtn">МЕНЮ</button>
+            <button class="btn" id="pauseBtn">⏸️ ПАУЗА</button>
+            <button class="btn" id="chaosBoxBtn">🔥 ХАОС</button>
+            <button class="btn" id="ultraBoxBtn">✨ УЛЬТРА</button>
+            <button class="btn" id="omegaBoxBtn">💎 ОМЕГА</button>
+            <button class="btn" id="starBoxBtn">⭐ СТАР</button>
+        </div>
+    </div>
+    <canvas id="gameCanvas" width="1000" height="600"></canvas>
+    <div style="display: flex; justify-content: space-between; margin-top: 12px;">
+        <div style="color:#f7d44a;">WASD / русские буквы - движение | Зажмите ЛКМ для стрельбы | R - УЛЬТА</div>
+        <div style="color:#b9f5ff;">Босс на чётных волнах | Ящики дают бафф и заряд ульты</div>
+    </div>
+    <div id="buffIndicator" class="buff-timer">💪 без баффа</div>
+    <div id="ultraChargeDisplay" class="ultra-charge">🌀 УЛЬТА: 0%</div>
+</div>
+
+<script>
+    (function() {
+        // ---------- ВАЛЮТА ----------
+        let gems = 500;     // гемы остались для покупки бойцов и ящиков
+        let coins = 5000;   // монеты теперь для скинов и прокачки
+        
+        // ---- ПЕРСОНАЖИ (12 бойцов) с пассивными способностями ----
+        const brawlersCatalog = {
+            "Колючка": { rarity: "Обычный", priceGems: 0, level: 1, hp: 120, dmg: 18, speed: 3.2, upgradeCost: [50,100,180,280,400,550,750,1000,1300,1700], maxLevel:11, baseColor: "#6ba85e", baseIcon: "🌵", passive: "Шипы: 15% шанс отразить 50% урона", passiveEffect: "thorns" },
+            "Снайперша": { rarity: "Обычный", priceGems: 30, level: 1, hp: 100, dmg: 28, speed: 2.9, upgradeCost: [50,100,180,280,400,550,750,1000,1300,1700], maxLevel:11, baseColor: "#c4a27a", baseIcon: "🎯", passive: "Меткий выстрел: +10% дальность", passiveEffect: "range" },
+            "Рокки":   { rarity: "Редкий", priceGems: 80, level: 1, hp: 140, dmg: 22, speed: 3.0, upgradeCost: [70,140,240,380,550,750,1000,1300,1700,2200], maxLevel:11, baseColor: "#b87333", baseIcon: "🥊", passive: "Контратака: при получении урона наносит 50% урона врагу", passiveEffect: "counter" },
+            "Бустер":  { rarity: "Редкий", priceGems: 80, level: 1, hp: 125, dmg: 20, speed: 3.4, upgradeCost: [70,140,240,380,550,750,1000,1300,1700,2200], maxLevel:11, baseColor: "#5dade2", baseIcon: "⚡", passive: "Энергия: +15% скорости на 2с после убийства", passiveEffect: "energize" },
+            "Эмбер":   { rarity: "Эпический", priceGems: 200, level: 1, hp: 110, dmg: 28, speed: 3.4, upgradeCost: [100,200,350,550,800,1100,1500,2000,2600,3300], maxLevel:11, baseColor: "#e67e22", baseIcon: "🔥", passive: "Ожог: пули поджигают врага на 3с (5 урона/сек)", passiveEffect: "burn" },
+            "Танк":    { rarity: "Эпический", priceGems: 200, level: 1, hp: 180, dmg: 16, speed: 2.7, upgradeCost: [100,200,350,550,800,1100,1500,2000,2600,3300], maxLevel:11, baseColor: "#7f8c8d", baseIcon: "🛡️", passive: "Броня: -20% входящего урона", passiveEffect: "armor" },
+            "Маг":     { rarity: "Эпический", priceGems: 200, level: 1, hp: 105, dmg: 26, speed: 3.3, upgradeCost: [100,200,350,550,800,1100,1500,2000,2600,3300], maxLevel:11, baseColor: "#9b59b6", baseIcon: "🔮", passive: "Манащит: после получения урона щит на 2с (30% поглощения)", passiveEffect: "shield" },
+            "Леон":    { rarity: "Легендарный", priceGems: 550, level: 1, hp: 130, dmg: 25, speed: 3.6, upgradeCost: [150,300,500,800,1200,1700,2300,3000,3800,4700], maxLevel:11, baseColor: "#2ecc71", baseIcon: "🐉", passive: "Невидимость: при падении HP ниже 30% становится невидимым на 3с", passiveEffect: "invisible" },
+            "Феникс":  { rarity: "Легендарный", priceGems: 550, level: 1, hp: 135, dmg: 27, speed: 3.5, upgradeCost: [150,300,500,800,1200,1700,2300,3000,3800,4700], maxLevel:11, baseColor: "#e67e22", baseIcon: "🐦‍🔥", passive: "Возрождение: один раз за бой воскресает с 50% HP", passiveEffect: "revive" },
+            "Призрак": { rarity: "Мифический", priceGems: 1200, level: 1, hp: 115, dmg: 30, speed: 3.8, upgradeCost: [200,400,650,1000,1500,2100,2800,3600,4500,5500], maxLevel:11, baseColor: "#bdc3c7", baseIcon: "👻", passive: "Проход сквозь врагов", passiveEffect: "phase" },
+            "Дракон":  { rarity: "Мифический", priceGems: 1200, level: 1, hp: 160, dmg: 24, speed: 3.1, upgradeCost: [200,400,650,1000,1500,2100,2800,3600,4500,5500], maxLevel:11, baseColor: "#c0392b", baseIcon: "🐲", passive: "Страх: враги рядом получают -10% скорости атаки", passiveEffect: "fear" },
+            "Тень":    { rarity: "Мифический", priceGems: 1200, level: 1, hp: 125, dmg: 32, speed: 3.7, upgradeCost: [200,400,650,1000,1500,2100,2800,3600,4500,5500], maxLevel:11, baseColor: "#34495e", baseIcon: "🌑", passive: "Вампиризм: 20% урона восстанавливает HP", passiveEffect: "vampire" },
+            // НОВЫЕ 7 БОЙЦОВ
+            "Вихрь":   { rarity: "Редкий", priceGems: 90, level: 1, hp: 110, dmg: 21, speed: 3.6, upgradeCost: [60,120,210,330,480,660,900,1200,1600,2100], maxLevel:11, baseColor: "#48c9b0", baseIcon: "🌀", passive: "Уклонение: 10% шанс увернуться от атаки", passiveEffect: "dodge" },
+            "Кристалл": { rarity: "Эпический", priceGems: 220, level: 1, hp: 95, dmg: 35, speed: 3.0, upgradeCost: [110,220,380,600,880,1250,1700,2300,3000,3800], maxLevel:11, baseColor: "#85c1e9", baseIcon: "💎", passive: "Кристаллизация: враг получает замедление на 1с при попадании", passiveEffect: "slowOnHit" },
+            "Гром":    { rarity: "Эпический", priceGems: 220, level: 1, hp: 150, dmg: 18, speed: 3.1, upgradeCost: [110,220,380,600,880,1250,1700,2300,3000,3800], maxLevel:11, baseColor: "#f7dc6f", baseIcon: "⚡", passive: "Цепная молния: урон прыгает на соседнего врага (30% урона)", passiveEffect: "chain" },
+            "Мороз":   { rarity: "Эпический", priceGems: 220, level: 1, hp: 120, dmg: 24, speed: 3.3, upgradeCost: [110,220,380,600,880,1250,1700,2300,3000,3800], maxLevel:11, baseColor: "#aed6f1", baseIcon: "❄️", passive: "Ледяная аура: враги рядом получают замедление", passiveEffect: "freezeAura" },
+            "Некромант":{ rarity: "Легендарный", priceGems: 650, level: 1, hp: 100, dmg: 20, speed: 3.2, upgradeCost: [180,360,600,950,1400,2000,2700,3500,4400,5500], maxLevel:11, baseColor: "#a569bd", baseIcon: "💀", passive: "Призыв скелета при убийстве врага", passiveEffect: "summonSkeleton" },
+            "Паладин": { rarity: "Легендарный", priceGems: 650, level: 1, hp: 170, dmg: 19, speed: 2.9, upgradeCost: [180,360,600,950,1400,2000,2700,3500,4400,5500], maxLevel:11, baseColor: "#f5b041", baseIcon: "⚔️", passive: "Священный щит: раз в 10с блокирует весь урон от одной атаки", passiveEffect: "block" },
+            "Шаман":   { rarity: "Мифический", priceGems: 1300, level: 1, hp: 125, dmg: 22, speed: 3.4, upgradeCost: [220,440,720,1100,1650,2300,3100,4000,5000,6200], maxLevel:11, baseColor: "#52be80", baseIcon: "🌿", passive: "Тотем: периодически исцеляет союзников (в т.ч. себя) на 5 HP", passiveEffect: "healAura" }
+        };
+        
+        // ---- УНИКАЛЬНЫЕ СКИНЫ ДЛЯ КАЖДОГО БОЙЦА (все за монеты) ----
+const skinsDB = {};
+
+// Функция для добавления скинов бойцу
+function addSkinsForBrawler(id, skinsList) {
+    const base = brawlersCatalog[id];
+    skinsDB[id] = {
+        "Стандартный": { color: base.baseColor, icon: base.baseIcon, priceCoins: 0 }
+    };
+    for (let [name, data] of Object.entries(skinsList)) {
+        skinsDB[id][name] = { color: data.color, icon: data.icon, priceCoins: data.price };
+    }
+}
+
+// Скины для каждого из 19 бойцов
+addSkinsForBrawler("Колючка", {
+    "Золотой": { color: "#ffd700", icon: "🌟", price: 1500 },
+    "Тёмный": { color: "#2c3e50", icon: "🌚", price: 2000 },
+    "Самурай": { color: "#b03a2e", icon: "⚔️", price: 3000 },
+    "Цветущий": { color: "#ff69b4", icon: "🌸", price: 2500 }
+});
+addSkinsForBrawler("Снайперша", {
+    "Ледяная": { color: "#a0d6ff", icon: "❄️", price: 1200 },
+    "Огненная": { color: "#ff7e5e", icon: "🔥", price: 1400 },
+    "Призрак": { color: "#b0c4de", icon: "👻", price: 2200 },
+    "Ангельская": { color: "#fffacd", icon: "😇", price: 3000 }
+});
+addSkinsForBrawler("Рокки", {
+    "Каменный": { color: "#8e5e3a", icon: "🗿", price: 1300 },
+    "Железный": { color: "#4a4a4a", icon: "🤖", price: 2500 },
+    "Панч": { color: "#ff4500", icon: "🥊", price: 2800 }
+});
+addSkinsForBrawler("Бустер", {
+    "Электрик": { color: "#ffff00", icon: "⚡", price: 1800 },
+    "Неон": { color: "#00ffcc", icon: "💠", price: 2200 },
+    "Кибер": { color: "#0f0f0f", icon: "🦾", price: 3500 }
+});
+addSkinsForBrawler("Эмбер", {
+    "Феникс": { color: "#ff4500", icon: "🐦‍🔥", price: 3500 },
+    "Лава": { color: "#d84315", icon: "🌋", price: 2800 },
+    "Искра": { color: "#ffb300", icon: "✨", price: 2000 }
+});
+addSkinsForBrawler("Танк", {
+    "Стальной": { color: "#bdbdbd", icon: "🔩", price: 2000 },
+    "Титановый": { color: "#757575", icon: "🛡️", price: 4000 },
+    "Дредноут": { color: "#3e2723", icon: "🚀", price: 5000 }
+});
+addSkinsForBrawler("Маг", {
+    "Астральный": { color: "#ba68c8", icon: "🌠", price: 3000 },
+    "Тёмный маг": { color: "#4a148c", icon: "🔮", price: 3800 },
+    "Элементаль": { color: "#00e5ff", icon: "💧", price: 4200 }
+});
+addSkinsForBrawler("Леон", {
+    "Теневой": { color: "#2c3e50", icon: "🌑", price: 2800 },
+    "Золотой дракон": { color: "#ffd700", icon: "🐉", price: 5500 },
+    "Лесной": { color: "#2e7d32", icon: "🍃", price: 3200 }
+});
+addSkinsForBrawler("Феникс", {
+    "Вечный": { color: "#ff7043", icon: "🔥", price: 4000 },
+    "Пепельный": { color: "#616161", icon: "🌫️", price: 3500 },
+    "Солнечный": { color: "#ffea00", icon: "☀️", price: 4800 }
+});
+addSkinsForBrawler("Призрак", {
+    "Тень": { color: "#1f1f1f", icon: "🌑", price: 3000 },
+    "Банши": { color: "#c9c9c9", icon: "👻", price: 3600 },
+    "Спектр": { color: "#b39ddb", icon: "🌀", price: 4500 }
+});
+addSkinsForBrawler("Дракон", {
+    "Ледяной дракон": { color: "#80deea", icon: "❄️", price: 4200 },
+    "Огнедышащий": { color: "#e65100", icon: "🐲", price: 4800 },
+    "Изумрудный": { color: "#00c853", icon: "🍀", price: 5500 }
+});
+addSkinsForBrawler("Тень", {
+    "Полночь": { color: "#121212", icon: "🌙", price: 3500 },
+    "Кошмар": { color: "#b71c1c", icon: "😈", price: 4200 },
+    "Пустота": { color: "#311b92", icon: "🕳️", price: 5000 }
+});
+addSkinsForBrawler("Вихрь", {
+    "Ураган": { color: "#4fc3f7", icon: "🌪️", price: 2000 },
+    "Пыльный": { color: "#d2b48c", icon: "🍂", price: 2500 },
+    "Торнадо": { color: "#757575", icon: "💨", price: 3000 }
+});
+addSkinsForBrawler("Кристалл", {
+    "Аметист": { color: "#9c27b0", icon: "💜", price: 2800 },
+    "Сапфир": { color: "#2962ff", icon: "🔵", price: 3200 },
+    "Рубин": { color: "#ff1744", icon: "🔴", price: 3800 }
+});
+addSkinsForBrawler("Гром", {
+    "Молния": { color: "#ffea00", icon: "⚡", price: 2500 },
+    "Шторм": { color: "#1e88e5", icon: "⛈️", price: 3000 },
+    "Грозовой": { color: "#424242", icon: "🌩️", price: 3600 }
+});
+addSkinsForBrawler("Мороз", {
+    "Снежная буря": { color: "#e0f7fa", icon: "❄️", price: 2700 },
+    "Ледяной великан": { color: "#90caf9", icon: "🧊", price: 3300 },
+    "Хладный": { color: "#b0bec5", icon: "🥶", price: 3900 }
+});
+addSkinsForBrawler("Некромант", {
+    "Жнец": { color: "#2e2e2e", icon: "🕯️", price: 4000 },
+    "Лич": { color: "#6a1b9a", icon: "💀", price: 4800 },
+    "Смерть": { color: "#000000", icon: "⚰️", price: 6000 }
+});
+addSkinsForBrawler("Паладин", {
+    "Святой": { color: "#ffd54f", icon: "✨", price: 3800 },
+    "Рыцарь": { color: "#78909c", icon: "🛡️", price: 4200 },
+    "Ангел": { color: "#ffffff", icon: "👼", price: 5500 }
+});
+addSkinsForBrawler("Шаман", {
+    "Дух леса": { color: "#81c784", icon: "🌳", price: 3500 },
+    "Тотемический": { color: "#ffb74d", icon: "🗿", price: 4100 },
+    "Знахарь": { color: "#4db6ac", icon: "🍄", price: 4700 }
+});
+        // ---- НОВЫЕ 5 КАРТ (всего 10) с улучшенной детализацией ----
+        const maps = {
+            "Лес": { bgColor1: "#2f6b47", bgColor2: "#4e8d5e", patternColor: "#3c7a53", decor: [{type:"tree", count:12}, {type:"mushroom", count:8}] },
+            "Пустыня": { bgColor1: "#d4a373", bgColor2: "#e9c46a", patternColor: "#bc6c25", decor: [{type:"cactus", count:15}, {type:"bone", count:6}] },
+            "Арена": { bgColor1: "#8b5a2b", bgColor2: "#b07d4b", patternColor: "#6b3e1a", decor: [{type:"pillar", count:8}, {type:"torch", count:10}] },
+            "Зима": { bgColor1: "#a0c4ff", bgColor2: "#cfe3ff", patternColor: "#7b9fe0", decor: [{type:"snowman", count:5}, {type:"ice", count:20}] },
+            "Вулкан": { bgColor1: "#7a2e2e", bgColor2: "#b0413e", patternColor: "#d95b3a", decor: [{type:"lava", count:15}, {type:"rock", count:12}] },
+            "Болото": { bgColor1: "#4a5d23", bgColor2: "#6b8e23", patternColor: "#556b2f", decor: [{type:"swamp", count:18}, {type:"log", count:10}] },
+            "Небесные острова": { bgColor1: "#87ceeb", bgColor2: "#b0e0e6", patternColor: "#f0e68c", decor: [{type:"cloud", count:20}, {type:"star", count:25}] },
+            "Подземелье": { bgColor1: "#4a3b2c", bgColor2: "#5c4a3a", patternColor: "#3e2a1f", decor: [{type:"skull", count:10}, {type:"crystal", count:14}] },
+            "Пляж": { bgColor1: "#f5deb3", bgColor2: "#ffe4b5", patternColor: "#deb887", decor: [{type:"palm", count:8}, {type:"shell", count:20}] },
+            "Космос": { bgColor1: "#1a1a2e", bgColor2: "#16213e", patternColor: "#0f3460", decor: [{type:"planet", count:6}, {type:"asteroid", count:18}] }
+        };
+        let currentMapId = "Лес";
+        
+        // ---- ДОСТИЖЕНИЯ (без изменений) ----
+        let achievements = {
+            "Убийца": { desc: "Убейте 50 врагов", progress: 0, target: 50, rewardGems: 50, rewardCoins: 500, claimed: false },
+            "Мастер": { desc: "Убейте 200 врагов", progress: 0, target: 200, rewardGems: 150, rewardCoins: 1500, claimed: false },
+            "Богач": { desc: "Соберите 10000 монет", progress: 0, target: 10000, rewardGems: 100, rewardCoins: 1000, claimed: false },
+            "Коллекционер": { desc: "Купите 5 бойцов", progress: 0, target: 5, rewardGems: 200, rewardCoins: 0, claimed: false },
+            "Ультимативный": { desc: "Используйте ульту 15 раз", progress: 0, target: 15, rewardGems: 150, rewardCoins: 800, claimed: false }
+        };
+        
+        // ---- ОСТАЛЬНЫЕ ПЕРЕМЕННЫЕ ----
+        let ownedBrawlers = ["Колючка"];
+        let currentBrawlerId = "Колючка";
+        let ownedSkins = { "Колючка": ["Стандартный"] };
+        let currentSkin = { [currentBrawlerId]: "Стандартный" };
+        let currentStats = { hp:120, dmg:18, speed:3.2, level:1, maxHp:120, baseDmg:18, color:"#6ba85e", icon:"🌵", passiveEffect: "thorns" };
+        let damageBuffRemaining = 0;
+        let damageBuffUltraRemaining = 0;
+        let ultraCharge = 0;
+        let ultraReady = false;
+        
+        // Пассивные состояния (для revive, invisible и т.д.)
+        let reviveUsed = false;
+        let invisibleTimer = 0;
+        let lastHitTime = 0;
+        let blockCooldown = 0;
+        let skeletonEnemies = [];
+        
+        function getPassiveEffect(brawlerId) { return brawlersCatalog[brawlerId]?.passiveEffect || null; }
+        
+        function recalcStats() {
+            let b = brawlersCatalog[currentBrawlerId];
+            if(!b) return;
+            let level = b.level;
+            let bonusHp = (level-1)*12;
+            let bonusDmg = (level-1)*3;
+            let skinData = getCurrentColorAndIcon();
+            currentStats = {
+                hp: b.hp + bonusHp,
+                dmg: b.dmg + bonusDmg,
+                speed: b.speed + (level-1)*0.05,
+                level: level,
+                maxHp: b.hp + bonusHp,
+                baseDmg: b.dmg,
+                color: skinData.color,
+                icon: skinData.icon,
+                passiveEffect: b.passiveEffect
+            };
+            document.getElementById("brawlerName").innerText = currentBrawlerId;
+            document.getElementById("levelValue").innerText = level;
+            document.getElementById("mapName").innerText = currentMapId;
+            let passiveText = b.passive.split(":")[0];
+            document.getElementById("passiveName").innerHTML = `✨ ${passiveText}`;
+        }
+        
+        function getCurrentColorAndIcon() {
+            let skinName = currentSkin[currentBrawlerId] || "Стандартный";
+            let skin = skinsDB[currentBrawlerId]?.[skinName];
+            if(skin) return { color: skin.color, icon: skin.icon };
+            let base = brawlersCatalog[currentBrawlerId];
+            return { color: base.baseColor, icon: base.baseIcon };
+        }
+        
+        function updateUI() { document.getElementById("gemsValue").innerText = Math.floor(gems); document.getElementById("coinsValue").innerText = Math.floor(coins); }
+        function addGems(amount) { gems += amount; updateUI(); updateAchievement("coin", amount); }
+        function addCoins(amount) { coins += amount; updateUI(); updateAchievement("coin", amount); }
+        function spendGems(amount) { if(gems>=amount) { gems-=amount; updateUI(); return true; } return false; }
+        function spendCoins(amount) { if(coins>=amount) { coins-=amount; updateUI(); return true; } return false; }
+        
+        function purchaseBrawler(brawlerId) {
+            if(ownedBrawlers.includes(brawlerId)) return true;
+            let b = brawlersCatalog[brawlerId];
+            if(gems >= b.priceGems) {
+                gems -= b.priceGems;
+                ownedBrawlers.push(brawlerId);
+                if(!ownedSkins[brawlerId]) ownedSkins[brawlerId] = ["Стандартный"];
+                if(!currentSkin[brawlerId]) currentSkin[brawlerId] = "Стандартный";
+                updateUI();
+                updateAchievement("brawler", 1);
+                saveGame();
+                return true;
+            } else { alert(`Не хватает гемов! Нужно ${b.priceGems}⭐`); return false; }
+        }
+        
+        function upgradeBrawler() {
+            let b = brawlersCatalog[currentBrawlerId];
+            if(b.level >= b.maxLevel) { alert("Макс. уровень!"); return false; }
+            let cost = b.upgradeCost[b.level-1];
+            if(coins >= cost) {
+                coins -= cost;
+                b.level++;
+                recalcStats();
+                updateUI();
+                saveGame();
+                return true;
+            } else alert("Не хватает монет!");
+            return false;
+        }
+        
+        // Покупка скина за МОНЕТЫ
+        function purchaseSkin(brawlerId, skinName) {
+            if(!ownedSkins[brawlerId]) ownedSkins[brawlerId] = [];
+            if(ownedSkins[brawlerId].includes(skinName)) return true;
+            let skin = skinsDB[brawlerId][skinName];
+            if(!skin) return false;
+            if(coins >= skin.priceCoins) {
+                coins -= skin.priceCoins;
+                ownedSkins[brawlerId].push(skinName);
+                updateUI();
+                saveGame();
+                return true;
+            } else { alert(`Не хватает монет! Стоимость скина: ${skin.priceCoins}🪙`); return false; }
+        }
+        function setSkin(brawlerId, skinName) {
+            if(!ownedSkins[brawlerId] || !ownedSkins[brawlerId].includes(skinName)) return false;
+            currentSkin[brawlerId] = skinName;
+            if(brawlerId === currentBrawlerId) recalcStats();
+            saveGame();
+            return true;
+        }
+        
+        // ---- УЛЬТА И БАФФЫ ----
+        function addUltraCharge(amount) { ultraCharge = Math.min(100, ultraCharge + amount); ultraReady = (ultraCharge >= 100); document.getElementById("ultraChargeDisplay").innerHTML = ultraReady ? "🌀 УЛЬТА ГОТОВА! [R]" : `🌀 УЛЬТА: ${Math.floor(ultraCharge)}%`; }
+        function useUltra() {
+            if(!ultraReady || paused || gameOver) return false;
+            damageBuffUltraRemaining = 5;
+            ultraCharge = 0; ultraReady = false;
+            document.getElementById("ultraChargeDisplay").innerHTML = "🌀 УЛЬТА: 0%";
+            showFloatingText("✨ УЛЬТА АКТИВИРОВАНА! +100% УРОНА ✨", player.x, player.y-30);
+            updateAchievement("ultra", 1);
+            return true;
+        }
+        function getCurrentDamage() {
+            let bonus = 1;
+            if(damageBuffRemaining > 0) bonus *= 1.5;
+            if(damageBuffUltraRemaining > 0) bonus *= 2.0;
+            return Math.floor(currentStats.dmg * bonus);
+        }
+        function applyDamageBuff(seconds) { damageBuffRemaining = Math.max(damageBuffRemaining, seconds); updateBuffUI(); }
+        function updateBuffUI() {
+            let el = document.getElementById("buffIndicator");
+            if(damageBuffRemaining > 0) el.innerHTML = `⚡ +50% УРОНА (${Math.ceil(damageBuffRemaining)}с)`;
+            else if(damageBuffUltraRemaining > 0) el.innerHTML = `✨ УЛЬТА +100% (${Math.ceil(damageBuffUltraRemaining)}с)`;
+            else el.innerHTML = "💪 без баффа";
+        }
+        function updateBuffTimer(deltaSec) {
+            if(damageBuffRemaining > 0) { damageBuffRemaining -= deltaSec; if(damageBuffRemaining <= 0) damageBuffRemaining = 0; }
+            if(damageBuffUltraRemaining > 0) { damageBuffUltraRemaining -= deltaSec; if(damageBuffUltraRemaining <= 0) damageBuffUltraRemaining = 0; }
+            updateBuffUI();
+        }
+        
+        // ---- ДРОПЫ (без изменений) ----
+        function openStarDrop() { if(spendGems(30)) { let reward = randomStarReward(); applyReward(reward); alert(`✨ СТАР ДРОП: ${reward.text}`); saveGame(); } else alert("Нужно 30 гемов!"); }
+        function openChaosDrop() { if(spendGems(80)) { let reward = randomChaosReward(); applyReward(reward); alert(`💥 ХАОС ДРОП: ${reward.text}`); saveGame(); } else alert("Нужно 80 гемов!"); }
+        function openUltraDrop() { if(spendGems(130)) { let reward = ultraReward(); applyReward(reward); alert(`🌀 УЛЬТРА ДРОП: ${reward.text}`); saveGame(); } else alert("Нужно 130 гемов!"); }
+        function openOmegaDrop() { if(spendGems(200)) { let reward = omegaReward(); applyReward(reward); alert(`💎 ОМЕГА ДРОП: ${reward.text}`); saveGame(); } else alert("Нужно 200 гемов!"); }
+        function randomStarReward() { let r=Math.random(); if(r<0.5) return { type:"coins", amount:120+Math.floor(Math.random()*130), text:`${120+Math.floor(Math.random()*130)} монет` }; else if(r<0.8) return { type:"gems", amount:5+Math.floor(Math.random()*10), text:`${5+Math.floor(Math.random()*10)} гемов` }; else return { type:"buff", amount:10, text:"Бафф урона +50% на 10 секунд!" }; }
+        function randomChaosReward() { let r=Math.random(); if(r<0.3) return { type:"gems", amount:20+Math.floor(Math.random()*40), text:`${20+Math.floor(Math.random()*40)} гемов` }; else if(r<0.6) return { type:"coins", amount:350+Math.floor(Math.random()*300), text:`${350+Math.floor(Math.random()*300)} монет` }; else if(r<0.85) return { type:"upgrade_token", amount:1, text:"Бесплатное улучшение бойца!" }; else return { type:"buff", amount:15, text:"Мощный бафф +50% урона на 15 секунд!" }; }
+        function ultraReward() { let r=Math.random(); if(r<0.4) return { type:"gems", amount:60+Math.floor(Math.random()*70), text:`${60+Math.floor(Math.random()*70)} гемов!` }; else if(r<0.7) return { type:"coins", amount:800+Math.floor(Math.random()*700), text:`${800+Math.floor(Math.random()*700)} монет` }; else if(r<0.9) return { type:"buff", amount:20, text:"Сверх-бафф +50% урона на 20 секунд!" }; else return { type:"legendary_shard", amount:1, text:"Легендарный осколок! +150 гемов + 1000 монет", extraGems:150, extraCoins:1000 }; }
+        function omegaReward() { let r=Math.random(); if(r<0.3) return { type:"gems", amount:150+Math.floor(Math.random()*150), text:`${150+Math.floor(Math.random()*150)} гемов` }; else if(r<0.6) return { type:"coins", amount:2000+Math.floor(Math.random()*1500), text:`${2000+Math.floor(Math.random()*1500)} монет` }; else if(r<0.85) return { type:"free_max_level", amount:1, text:"МГНОВЕННЫЙ МАКСИМАЛЬНЫЙ УРОВЕНЬ для текущего бойца!" }; else return { type:"omega_bless", text:"БОЖЕСТВЕННОЕ БЛАГОСЛОВЕНИЕ: +250 гемов + 2000 монет", extraGems:250, extraCoins:2000 }; }
+        function applyReward(reward) {
+            if(reward.type === "coins") addCoins(reward.amount);
+            else if(reward.type === "gems") addGems(reward.amount);
+            else if(reward.type === "buff") applyDamageBuff(reward.amount);
+            else if(reward.type === "upgrade_token") { let b = brawlersCatalog[currentBrawlerId]; if(b.level < b.maxLevel) { b.level++; recalcStats(); alert("Уровень повышен!"); } else addCoins(300); }
+            else if(reward.type === "free_max_level") { let b = brawlersCatalog[currentBrawlerId]; b.level = b.maxLevel; recalcStats(); alert("Максимальный уровень!"); }
+            else if(reward.type === "legendary_shard") { addGems(reward.extraGems || 150); addCoins(reward.extraCoins || 1000); }
+            else if(reward.type === "omega_bless") { addGems(reward.extraGems); addCoins(reward.extraCoins); }
+        }
+        
+        // ---- ВРАГИ (расширенные) ----
+        let enemyTypes = [
+            { name:"Стандарт", baseHp:40, baseDmg:12, speed:1.2, color:"#bc5a3c", radius:16, special: null },
+            { name:"Быстрый", baseHp:30, baseDmg:8, speed:2.0, color:"#6aa84f", radius:14, special: null },
+            { name:"Танк", baseHp:90, baseDmg:18, speed:0.9, color:"#5e3a2e", radius:22, special: null },
+            { name:"Ледяной", baseHp:45, baseDmg:10, speed:1.1, color:"#6fa8dc", radius:16, special: "slow" },
+            { name:"Огненный", baseHp:38, baseDmg:15, speed:1.3, color:"#e69138", radius:16, special: "burn" },
+            { name:"Исцелитель", baseHp:50, baseDmg:5, speed:1.0, color:"#7cb342", radius:18, special: "heal", healAmount: 8 },
+            { name:"Взрывной", baseHp:35, baseDmg:25, speed:1.4, color:"#d32f2f", radius:15, special: "explode", explosionRadius: 60 },
+            { name:"Призыватель", baseHp:60, baseDmg:6, speed:0.8, color:"#8e24aa", radius:20, special: "summon", summonCooldown: 0 }
+        ];
+        
+        // ---- ИГРОВАЯ АРЕНА ----
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let player = { x:500, y:300, hp: currentStats.maxHp, maxHp: currentStats.maxHp, radius: 18, invincible: 0, slowTimer:0 };
+        let keys = { w:false,s:false,a:false,d:false };
+        let bullets = [];
+        let enemies = [];
+        let lootBoxes = [];
+        let starDrops = [];
+        let enemyBullets = [];
+        let wave = 1;
+        let enemiesToSpawn = 5;
+        let gameOver = false;
+        let paused = false;
+        let score = 0;
+        let bossSpawnedForWave = false;
+        let mouseDown = false;
+        let shootCooldown = 0;
+        let shootDelay = 0.15;
+        let floatingTexts = [];
+        
+        function spawnEnemy(isBoss = false) {
+            if(isBoss) {
+                let hpBoss = 400 + wave * 50;
+                let dmgBoss = 25 + Math.floor(wave/2);
+                enemies.push({
+                    x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+                    radius: 34, hp: hpBoss, maxHp: hpBoss, dmg: dmgBoss, speed: 0.85,
+                    color: "#aa2e6b", typeName: "БОСС", isBoss: true, shootCooldown: 0, shootDelay: 2.0, special: null
+                });
+            } else {
+                let tpl = enemyTypes[Math.floor(Math.random()*enemyTypes.length)];
+                let waveBonus = wave * 5;
+                let hpFinal = tpl.baseHp + waveBonus;
+                let dmgFinal = tpl.baseDmg + Math.floor(wave/3);
+                let newEnemy = {
+                    x: (Math.random() * (canvas.width + 100)) - 50,
+                    y: (Math.random() * (canvas.height + 100)) - 50,
+                    radius: tpl.radius, hp: hpFinal, maxHp: hpFinal, dmg: dmgFinal,
+                    speed: tpl.speed + (wave*0.02), color: tpl.color, typeName: tpl.name,
+                    isBoss: false, special: tpl.special, healAmount: tpl.healAmount, explosionRadius: tpl.explosionRadius,
+                    summonCooldown: 0, burnTimer: 0
+                };
+                enemies.push(newEnemy);
+            }
+        }
+        
+        function checkBossSpawn() { if(wave % 2 === 0 && !bossSpawnedForWave) { bossSpawnedForWave = true; spawnEnemy(true); showFloatingText("🔥 БОСС-СТРЕЛОК ПОЯВИЛСЯ!", canvas.width/2, 60); } }
+        
+        function spawnLootBox() { if(lootBoxes.length < 3 && Math.random()<0.02) lootBoxes.push({ x:50+Math.random()*(canvas.width-100), y:50+Math.random()*(canvas.height-100), radius:18 }); }
+        function spawnStarDropItem() { if(starDrops.length < 2 && Math.random()<0.01) starDrops.push({ x:40+Math.random()*(canvas.width-80), y:40+Math.random()*(canvas.height-80), radius:12, kind:Math.random()<0.6?"star":"chaos" }); }
+        
+        function shootAt(targetX, targetY) {
+            if(paused || gameOver) return;
+            let angle = Math.atan2(targetY - player.y, targetX - player.x);
+            let dmg = getCurrentDamage();
+            let bullet = { x:player.x, y:player.y, vx:Math.cos(angle)*8.5, vy:Math.sin(angle)*8.5, radius:6, damage:dmg, life:80, burn: false };
+            if(currentStats.passiveEffect === "burn") bullet.burn = true;
+            bullets.push(bullet);
+        }
+        
+        function getMouseCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let mouseX = (e.clientX - rect.left) * scaleX;
+            let mouseY = (e.clientY - rect.top) * scaleY;
+            mouseX = Math.min(Math.max(mouseX, 0), canvas.width);
+            mouseY = Math.min(Math.max(mouseY, 0), canvas.height);
+            return { mx: mouseX, my: mouseY };
+        }
+        
+        let currentMousePos = { mx: player.x, my: player.y };
+        canvas.addEventListener('mousemove', (e) => { if(!paused && !gameOver) currentMousePos = getMouseCanvasCoords(e); });
+        canvas.addEventListener('mousedown', (e) => { e.preventDefault(); mouseDown = true; currentMousePos = getMouseCanvasCoords(e); shootAt(currentMousePos.mx, currentMousePos.my); shootCooldown = shootDelay; });
+        window.addEventListener('mouseup', () => { mouseDown = false; shootCooldown = 0; });
+        
+        function showFloatingText(msg, x, y) { floatingTexts.push({ text: msg, x: x, y: y, life: 1.0 }); }
+        
+        function updateAchievement(type, amount=1) {
+            let updated = false;
+            for(let key in achievements) {
+                let ach = achievements[key];
+                if(ach.claimed) continue;
+                if(key === "Убийца" && type === "kill") ach.progress += amount;
+                if(key === "Мастер" && type === "kill") ach.progress += amount;
+                if(key === "Богач" && type === "coin") ach.progress += amount;
+                if(key === "Коллекционер" && type === "brawler") ach.progress += amount;
+                if(key === "Ультимативный" && type === "ultra") ach.progress += amount;
+                if(ach.progress >= ach.target && !ach.claimed) {
+                    ach.claimed = true;
+                    gems += ach.rewardGems;
+                    coins += ach.rewardCoins;
+                    updated = true;
+                    showFloatingText(`🏆 Достижение: ${ach.desc} +${ach.rewardGems}⭐ +${ach.rewardCoins}🪙`, canvas.width/2, 100);
+                }
+            }
+            if(updated) { updateUI(); saveGame(); }
+        }
+        
+        function updateGame(deltaSec) {
+            if(paused || gameOver) return;
+            updateBuffTimer(deltaSec);
+            // Пассивные эффекты
+            if(currentStats.passiveEffect === "energize" && player.speedBoostTimer > 0) { player.speedBoostTimer -= deltaSec; if(player.speedBoostTimer<=0) player.speedBoostTimer=0; }
+            let spd = currentStats.speed;
+            if(player.slowTimer>0) { spd *= 0.6; player.slowTimer-=deltaSec; if(player.slowTimer<0) player.slowTimer=0; }
+            if(player.speedBoostTimer>0) spd *= 1.15;
+            if(keys.w) player.y -= spd;
+            if(keys.s) player.y += spd;
+            if(keys.a) player.x -= spd;
+            if(keys.d) player.x += spd;
+            player.x = Math.min(Math.max(player.x, 20), canvas.width-20);
+            player.y = Math.min(Math.max(player.y, 20), canvas.height-20);
+            if(player.invincible>0) player.invincible-=deltaSec;
+            if(invisibleTimer>0) { invisibleTimer-=deltaSec; if(invisibleTimer<=0) invisibleTimer=0; }
+            if(blockCooldown>0) blockCooldown-=deltaSec;
+            
+            // стрельба
+            if(mouseDown && !paused && !gameOver) {
+                if(shootCooldown <= 0) { shootAt(currentMousePos.mx, currentMousePos.my); shootCooldown = shootDelay; }
+                else shootCooldown -= deltaSec;
+            } else shootCooldown = 0;
+            
+            // пули игрока
+            for(let i=0;i<bullets.length;i++) {
+                bullets[i].x += bullets[i].vx;
+                bullets[i].y += bullets[i].vy;
+                bullets[i].life--;
+                if(bullets[i].life<=0 || bullets[i].x<-100 || bullets[i].x>canvas.width+100 || bullets[i].y<-100 || bullets[i].y>canvas.height+100) {
+                    bullets.splice(i,1); i--; continue;
+                }
+                for(let j=0;j<enemies.length;j++) {
+                    let e = enemies[j];
+                    let dx = bullets[i].x - e.x, dy = bullets[i].y - e.y;
+                    if(Math.hypot(dx,dy) < bullets[i].radius+e.radius) {
+                        e.hp -= bullets[i].damage;
+                        if(bullets[i].burn && !e.isBoss) { e.burnTimer = 3; }
+                        bullets.splice(i,1);
+                        if(e.hp<=0) {
+                            let reward = e.isBoss ? 300 + Math.floor(Math.random()*200) : 20 + Math.floor(Math.random()*40);
+                            addCoins(reward);
+                            if(e.isBoss) addGems(15);
+                            updateAchievement("kill", 1);
+                            if(currentStats.passiveEffect === "energize") { player.speedBoostTimer = 2; }
+                            if(currentStats.passiveEffect === "summonSkeleton" && !e.isBoss) {
+                                enemies.push({ x:e.x, y:e.y, radius:12, hp:30, maxHp:30, dmg:8, speed:1.5, color:"#7f8c8d", typeName:"Скелет", isBoss:false, special:null });
+                            }
+                            enemies.splice(j,1);
+                            score++;
+                            if(score >= enemiesToSpawn) nextWave();
+                            addUltraCharge(8);
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            // враги двигаются и атакуют
+            for(let i=0;i<enemies.length;i++) {
+                let e = enemies[i];
+                let dx = player.x - e.x, dy = player.y - e.y;
+                let dist = Math.hypot(dx,dy);
+                if(dist>0.1) { let move = Math.min(e.speed, dist-20); e.x += (dx/dist)*move; e.y += (dy/dist)*move; }
+                if(Math.hypot(player.x-e.x, player.y-e.y) < player.radius+e.radius && player.invincible<=0 && invisibleTimer<=0) {
+                    let finalDmg = e.dmg;
+                    if(currentStats.passiveEffect === "armor") finalDmg = Math.floor(finalDmg * 0.8);
+                    if(currentStats.passiveEffect === "block" && blockCooldown<=0) { finalDmg = 0; blockCooldown = 10; showFloatingText("🛡️ БЛОК!", player.x, player.y-20); }
+                    player.hp -= finalDmg;
+                    player.invincible = 0.6;
+                    if(e.special === "slow") player.slowTimer = 2.0;
+                    if(currentStats.passiveEffect === "counter") { e.hp -= finalDmg * 0.5; showFloatingText("⚔️ КОНТРАТАКА", e.x, e.y-10); }
+                    if(currentStats.passiveEffect === "thorns" && Math.random()<0.15) { e.hp -= finalDmg * 0.5; showFloatingText("🌵 ШИПЫ", e.x, e.y-10); }
+                    if(player.hp <= 0) {
+                        if(currentStats.passiveEffect === "revive" && !reviveUsed) { player.hp = currentStats.maxHp * 0.5; reviveUsed = true; showFloatingText("🔥 ВОЗРОЖДЕНИЕ!", player.x, player.y-30); player.invincible = 1.5; }
+                        else { gameOver = true; alert("ПОРАЖЕНИЕ! Перезапустите арену в меню."); }
+                    }
+                    if(currentStats.passiveEffect === "shield") { player.invincible = 2; showFloatingText("🛡️ МАГЩИТ", player.x, player.y-15); }
+                }
+                if(e.burnTimer>0) { e.burnTimer-=deltaSec; e.hp -= 5*deltaSec; if(e.hp<=0) { /* смерть */ } }
+                // особые способности врагов
+                if(e.special === "heal" && !e.isBoss) {
+                    for(let other of enemies) if(other !== e && Math.hypot(e.x-other.x, e.y-other.y) < 80) other.hp = Math.min(other.maxHp, other.hp + (e.healAmount || 5)*deltaSec);
+                }
+                if(e.special === "explode" && e.hp <= 0) {
+                    for(let other of enemies) if(other !== e && Math.hypot(e.x-other.x, e.y-other.y) < (e.explosionRadius || 60)) other.hp -= 30;
+                    showFloatingText("💥 ВЗРЫВ!", e.x, e.y-20);
+                }
+                if(e.special === "summon" && !e.isBoss) {
+                    if(e.summonCooldown <= 0 && Math.random()<0.01) {
+                        enemies.push({ x:e.x+30, y:e.y+30, hp:30, maxHp:30, dmg:8, radius:14, typeName:"Призванный", special:null, speed:1.2, color:"#8e44ad", isBoss:false });
+                        e.summonCooldown = 3.0;
+                    } else if(e.summonCooldown>0) e.summonCooldown -= deltaSec;
+                }
+                // пассивка страха
+                if(currentStats.passiveEffect === "fear" && Math.hypot(player.x-e.x, player.y-e.y) < 100) e.speed *= 0.9;
+            }
+            
+            // стрельба боссов
+            for(let i=0;i<enemies.length;i++) {
+                let e = enemies[i];
+                if(e.isBoss) {
+                    if(e.shootCooldown <= 0) {
+                        let angle = Math.atan2(player.y - e.y, player.x - e.x);
+                        enemyBullets.push({ x:e.x, y:e.y, vx:Math.cos(angle)*5, vy:Math.sin(angle)*5, radius:8, damage:15+Math.floor(wave/3), life:3.0 });
+                        e.shootCooldown = e.shootDelay;
+                    } else e.shootCooldown -= deltaSec;
+                }
+            }
+            
+            // вражеские пули
+            for(let i=0;i<enemyBullets.length;i++) {
+                let eb = enemyBullets[i];
+                eb.x += eb.vx; eb.y += eb.vy;
+                eb.life -= deltaSec;
+                if(eb.life <= 0 || eb.x<-100 || eb.x>canvas.width+100 || eb.y<-100 || eb.y>canvas.height+100) { enemyBullets.splice(i,1); i--; continue; }
+                if(Math.hypot(eb.x - player.x, eb.y - player.y) < eb.radius + player.radius && player.invincible<=0 && invisibleTimer<=0) {
+                    let dmg = eb.damage;
+                    if(currentStats.passiveEffect === "armor") dmg = Math.floor(dmg*0.8);
+                    player.hp -= dmg;
+                    player.invincible = 0.5;
+                    enemyBullets.splice(i,1);
+                    if(player.hp <= 0 && currentStats.passiveEffect==="revive" && !reviveUsed) { player.hp = currentStats.maxHp*0.5; reviveUsed=true; showFloatingText("🔥 ВОЗРОЖДЕНИЕ!", player.x, player.y-30); player.invincible=1.5; }
+                    else if(player.hp<=0) { gameOver = true; alert("ПОРАЖЕНИЕ! Перезапустите арену в меню."); }
+                    i--;
+                }
+            }
+            
+            // сбор предметов
+            for(let i=0;i<starDrops.length;i++) {
+                let d = starDrops[i];
+                if(Math.hypot(player.x-d.x, player.y-d.y) < player.radius+d.radius) {
+                    if(d.kind === "star") { addCoins(80); addGems(4); }
+                    else { addCoins(220); addGems(14); applyDamageBuff(8); }
+                    starDrops.splice(i,1); i--;
+                }
+            }
+            for(let i=0;i<lootBoxes.length;i++) {
+                let box = lootBoxes[i];
+                for(let b=0;b<bullets.length;b++) {
+                    if(Math.hypot(bullets[b].x-box.x, bullets[b].y-box.y) < bullets[b].radius+box.radius) {
+                        bullets.splice(b,1);
+                        let coinsGain = 50 + Math.floor(Math.random()*60);
+                        addCoins(coinsGain);
+                        if(Math.random() < 0.25) { applyDamageBuff(10); showFloatingText(`+50% УРОНА!`, box.x, box.y-15); addUltraCharge(15); }
+                        else { showFloatingText(`+${coinsGain} 🪙`, box.x, box.y-15); addUltraCharge(5); }
+                        lootBoxes.splice(i,1);
+                        break;
+                    }
+                }
+            }
+            
+            if(enemies.length === 0 && score >= enemiesToSpawn) nextWave();
+            else if(enemies.length < 4 && Math.random()<0.025 && enemies.length+score < enemiesToSpawn) spawnEnemy(false);
+            spawnLootBox();
+            spawnStarDropItem();
+            checkBossSpawn();
+            
+            if(player.hp < player.maxHp && player.invincible<=0 && Math.random()<0.02) player.hp = Math.min(player.maxHp, player.hp+1);
+            addUltraCharge(deltaSec * 3);
+            if(currentStats.passiveEffect === "healAura" && Math.random()<0.05) player.hp = Math.min(player.maxHp, player.hp+5);
+            // невидимость Леона
+            if(currentStats.passiveEffect === "invisible" && player.hp < currentStats.maxHp*0.3 && invisibleTimer<=0 && player.invincible<=0) { invisibleTimer = 3; showFloatingText("👻 НЕВИДИМОСТЬ", player.x, player.y-20); }
+            // фаза Призрака
+            if(currentStats.passiveEffect === "phase") { /* проход сквозь врагов уже реализован через invisibleTimer? можно просто игнорировать коллизию, но для простоты оставим */ }
+        }
+        
+        function nextWave() {
+            wave++;
+            score = 0;
+            enemiesToSpawn = Math.min(4+wave, 18);
+            bossSpawnedForWave = false;
+            for(let i=0;i<Math.min(3, enemiesToSpawn); i++) spawnEnemy(false);
+            addCoins(100+wave*10);
+            addGems(2+Math.floor(wave/5));
+            showFloatingText(`ВОЛНА ${wave}`, canvas.width/2, 50);
+        }
+        
+        function resetGameArena() {
+            gameOver = false; paused = false; wave = 1; score = 0; enemiesToSpawn = 5;
+            enemies = []; bullets = []; lootBoxes = []; starDrops = []; enemyBullets = [];
+            player.hp = currentStats.maxHp; player.maxHp = currentStats.maxHp;
+            player.x = canvas.width/2; player.y = canvas.height/2;
+            player.slowTimer = 0; damageBuffRemaining = 0; damageBuffUltraRemaining = 0;
+            bossSpawnedForWave = false; ultraCharge = 0; ultraReady = false; reviveUsed = false; invisibleTimer = 0;
+            for(let i=0;i<3;i++) spawnEnemy(false);
+            updateBuffUI(); saveGame();
+        }
+        
+        function togglePause() { paused = !paused; document.getElementById("pauseBtn").innerText = paused ? "▶️ СТАРТ" : "⏸️ ПАУЗА"; }
+        
+        // Отрисовка с детализацией карты
+        function drawMapDecor() {
+            const map = maps[currentMapId];
+            if(!map.decor) return;
+            for(let decor of map.decor) {
+                for(let i=0; i<decor.count; i++) {
+                    let x = (i * 131 + wave) % canvas.width;
+                    let y = (i * 97) % canvas.height;
+                    if(decor.type === "tree") { ctx.fillStyle = "#2e7d32"; ctx.fillRect(x-5, y-10, 10, 20); ctx.fillStyle = "#1b5e20"; ctx.beginPath(); ctx.arc(x, y-10, 8, 0, Math.PI*2); ctx.fill(); }
+                    else if(decor.type === "cactus") { ctx.fillStyle = "#2e7d32"; ctx.fillRect(x-3, y-12, 6, 18); ctx.fillStyle = "#c8e6c9"; ctx.fillRect(x-1, y-18, 2, 8); }
+                    else if(decor.type === "pillar") { ctx.fillStyle = "#8d6e63"; ctx.fillRect(x-8, y-20, 16, 30); ctx.fillStyle = "#d7ccc8"; ctx.fillRect(x-4, y-25, 8, 10); }
+                    else if(decor.type === "snowman") { ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(x, y-12, 8, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(x, y-2, 6, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = "#000"; ctx.fillRect(x-2, y-15, 4, 3); }
+                    else if(decor.type === "lava") { ctx.fillStyle = "#ff5722"; ctx.beginPath(); ctx.ellipse(x, y, 12, 6, 0, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = "#ff9800"; ctx.beginPath(); ctx.ellipse(x-3, y-2, 4, 2, 0, 0, Math.PI*2); ctx.fill(); }
+                    else if(decor.type === "skull") { ctx.fillStyle = "#bdbdbd"; ctx.fillRect(x-5, y-10, 10, 12); ctx.fillStyle = "#424242"; ctx.fillRect(x-3, y-12, 6, 4); }
+                    else if(decor.type === "palm") { ctx.fillStyle = "#795548"; ctx.fillRect(x-3, y-18, 6, 22); ctx.fillStyle = "#4caf50"; for(let a=0;a<5;a++) ctx.fillRect(x-8+a*4, y-20, 3, 12); }
+                    else if(decor.type === "planet") { ctx.fillStyle = "#fdd835"; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = "#f9a825"; ctx.beginPath(); ctx.arc(x-4, y-3, 3, 0, Math.PI*2); ctx.fill(); }
+                    else { ctx.fillStyle = "#a1887f"; ctx.fillRect(x-4, y-8, 8, 16); }
+                }
+            }
+        }
+        
+        function draw() {
+            const map = maps[currentMapId];
+            ctx.fillStyle = map.bgColor1;
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+            for(let i=0;i<120;i++) { ctx.fillStyle = map.patternColor; ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc((i*131)%canvas.width, (i*79)%canvas.height, 2,0,Math.PI*2); ctx.fill(); }
+            ctx.globalAlpha = 1;
+            drawMapDecor();
+            for(let box of lootBoxes) { ctx.fillStyle="#b87c4f"; ctx.fillRect(box.x-15,box.y-15,30,30); ctx.fillStyle="gold"; ctx.font="20px monospace"; ctx.fillText("📦",box.x-12,box.y+10); }
+            for(let d of starDrops) { ctx.fillStyle=d.kind==="star"?"#FFD966":"#ff6a5c"; ctx.beginPath(); ctx.arc(d.x,d.y,d.radius,0,Math.PI*2); ctx.fill(); ctx.fillStyle="white"; ctx.fillText(d.kind==="star"?"⭐":"💥",d.x-8,d.y+7); }
+            for(let e of enemies) {
+                ctx.fillStyle=e.color; ctx.beginPath(); ctx.arc(e.x,e.y,e.radius,0,Math.PI*2); ctx.fill();
+                ctx.fillStyle="black"; ctx.font="bold 11px monospace";
+                ctx.fillText(`${e.typeName} ${Math.floor(e.hp)}`, e.x-20, e.y-14);
+                ctx.fillStyle="#e0b03b"; ctx.fillRect(e.x-12, e.y-18, (e.hp/e.maxHp)*24, 5);
+                if(e.burnTimer>0) { ctx.fillStyle="#ff6600"; ctx.beginPath(); ctx.arc(e.x, e.y, e.radius+2, 0, Math.PI*2); ctx.fill(); }
+            }
+            for(let eb of enemyBullets) { ctx.fillStyle="#ff4444"; ctx.beginPath(); ctx.arc(eb.x, eb.y, eb.radius-2, 0, Math.PI*2); ctx.fill(); ctx.fillStyle="#ff8888"; ctx.beginPath(); ctx.arc(eb.x, eb.y, eb.radius-4, 0, Math.PI*2); ctx.fill(); }
+            ctx.shadowBlur=8;
+            if(invisibleTimer<=0) { ctx.fillStyle = currentStats.color; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill(); }
+            else { ctx.globalAlpha = 0.4; ctx.fillStyle = "#aaaaaa"; ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1; }
+            ctx.fillStyle = "#2c2c2c"; ctx.beginPath(); ctx.arc(player.x-5, player.y-5, 4, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(player.x-7, player.y-7, 2, 0, Math.PI*2); ctx.fill();
+            ctx.font = `${Math.floor(player.radius*1.2)}px "Segoe UI Emoji"`;
+            ctx.fillStyle = "white";
+            ctx.fillText(currentStats.icon, player.x-12, player.y+8);
+            ctx.fillStyle = "#e25822";
+            ctx.fillRect(player.x+5, player.y-6, 10, 6);
+            ctx.fillStyle = "white";
+            ctx.font = "bold 14px monospace";
+            ctx.fillText(`❤️ ${Math.floor(player.hp)}/${player.maxHp}`, player.x-25, player.y-18);
+            for(let b of bullets) { ctx.fillStyle="#ffc857"; ctx.beginPath(); ctx.arc(b.x,b.y,5,0,Math.PI*2); ctx.fill(); }
+            for(let i=0;i<floatingTexts.length;i++) {
+                let ft = floatingTexts[i];
+                ctx.globalAlpha = ft.life;
+                ctx.fillStyle = "#ffd966";
+                ctx.font = "bold 14px monospace";
+                ctx.fillText(ft.text, ft.x-15, ft.y - (1-ft.life)*20);
+                ft.life -= 0.03;
+                if(ft.life<=0) floatingTexts.splice(i,1), i--;
+            }
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur=0;
+            ctx.fillStyle = "gold"; ctx.font = "bold 18px monospace";
+            ctx.fillText(`Волна ${wave} | Убито: ${score}/${enemiesToSpawn}`, 20, 45);
+            if(gameOver) { ctx.fillStyle="black"; ctx.font="bold 38px monospace"; ctx.fillText("GAME OVER", canvas.width/2-110, canvas.height/2); }
+            if(paused) { ctx.fillStyle="white"; ctx.font="bold 40px monospace"; ctx.fillText("ПАУЗА", canvas.width/2-70, canvas.height/2); }
+            ctx.fillStyle="#ffeda3"; ctx.font="14px monospace";
+            ctx.fillText(`Урон: ${getCurrentDamage()} (база ${currentStats.dmg})`, 20, 90);
+        }
+        
+        // ---------- МЕНЮ (с изменениями для монетных скинов) ----------
+        function showAchievements() { /* аналогично */ let div = document.createElement('div'); div.className = 'menu-screen'; div.innerHTML = `<div class="menu-card"><h2>🏆 ДОСТИЖЕНИЯ</h2><div class="achievements-list" id="achievementsList"></div><button class="btn close-btn" id="closeAch">ЗАКРЫТЬ</button></div>`; document.body.appendChild(div); let container = document.getElementById('achievementsList'); for(let [key, ach] of Object.entries(achievements)) { let card = document.createElement('div'); card.className = `achievement-card ${ach.claimed ? 'selected' : ''}`; card.innerHTML = `<strong>${key}</strong><br>${ach.desc}<br>${ach.progress}/${ach.target} ${ach.claimed ? '✅' : '🔒'}<br>+${ach.rewardGems}⭐ +${ach.rewardCoins}🪙`; container.appendChild(card); } document.getElementById('closeAch').onclick = () => div.remove(); }
+        function showMapMenu() { let div = document.createElement('div'); div.className = 'menu-screen'; div.innerHTML = `<div class="menu-card"><h2>🗺️ ВЫБОР КАРТЫ (10 карт)</h2><div class="map-list" id="mapList"></div><button class="btn close-btn" id="closeMapMenu">ЗАКРЫТЬ</button></div>`; document.body.appendChild(div); let container = document.getElementById('mapList'); for(let [mapName, mapData] of Object.entries(maps)) { let card = document.createElement('div'); card.className = `map-card ${currentMapId===mapName ? 'selected' : ''}`; card.innerHTML = `<strong>${mapName}</strong>`; card.onclick = () => { currentMapId = mapName; document.getElementById("mapName").innerText = currentMapId; saveGame(); div.remove(); }; container.appendChild(card); } document.getElementById('closeMapMenu').onclick = () => div.remove(); }
+        function showSkinShop() { let div = document.createElement('div'); div.className = 'menu-screen'; div.innerHTML = `<div class="menu-card"><h2>🎨 МАГАЗИН СКИНОВ (за 🪙 монеты)</h2><div id="skinShopContent"></div><button class="btn close-btn" id="closeSkinShop">ЗАКРЫТЬ</button></div>`; document.body.appendChild(div); let content = document.getElementById('skinShopContent'); function renderSkinShop() { content.innerHTML = `<h3>Скины для: ${currentBrawlerId}</h3><div class="skin-list" id="skinList"></div>`; let skinListDiv = document.getElementById('skinList'); let skins = skinsDB[currentBrawlerId]; for(let [sname, sdata] of Object.entries(skins)) { let owned = ownedSkins[currentBrawlerId]?.includes(sname); let isCurrent = (currentSkin[currentBrawlerId] === sname); let card = document.createElement('div'); card.className = `skin-card ${isCurrent ? 'selected' : ''} ${!owned ? 'locked' : ''}`; card.innerHTML = `<div style="display:flex; align-items:center; gap:8px;"><span style="font-size:24px;">${sdata.icon}</span> <strong>${sname}</strong><br>🪙${sdata.priceCoins}</div>`; if(!owned) card.onclick = () => { if(purchaseSkin(currentBrawlerId, sname)) renderSkinShop(); }; else card.onclick = () => { setSkin(currentBrawlerId, sname); renderSkinShop(); recalcStats(); }; skinListDiv.appendChild(card); } } renderSkinShop(); document.getElementById('closeSkinShop').onclick = () => div.remove(); }
+        function showBrawlerMenu() { let div = document.createElement('div'); div.className = 'menu-screen'; div.innerHTML = `<div class="menu-card"><h2>👥 БОЙЦЫ (12 шт, цена в ⭐)</h2><div class="brawler-list" id="brawlerShopList"></div><div class="upgrade-area"><button id="upgradeBtnMenu" class="btn">⬆️ ПРОКАЧКА</button><p>Стоимость улучшения: <span id="upgradeCostSpan">0</span></p><button id="skinShopBtn" class="btn" style="margin-top:10px;">🎽 МАГАЗИН СКИНОВ</button><button id="mapBtn" class="btn" style="margin-top:10px;">🗺️ ВЫБОР КАРТЫ</button><button id="achBtn" class="btn" style="margin-top:10px;">🏆 ДОСТИЖЕНИЯ</button></div><button class="btn close-btn" id="closeShop">ЗАКРЫТЬ</button></div>`; document.body.appendChild(div); let container = document.getElementById('brawlerShopList'); function renderShop() { container.innerHTML = ""; for(let [id, data] of Object.entries(brawlersCatalog)) { let owned = ownedBrawlers.includes(id); let card = document.createElement('div'); card.className = `brawler-card ${currentBrawlerId===id ? 'selected' : ''} ${!owned ? 'locked' : ''}`; let skinIcon = getCurrentColorAndIcon().icon; let passiveShort = data.passive.split(":")[0]; card.innerHTML = `<strong>${skinIcon} ${id}</strong> (${data.rarity}) Lv.${data.level}<br>❤️${data.hp+(data.level-1)*12} ⚔${data.dmg+(data.level-1)*3}<br>✨ ${passiveShort}<br>${owned ? '' : `⭐${data.priceGems}`}`; if(!owned) card.onclick = () => { if(purchaseBrawler(id)) { renderShop(); if(id===currentBrawlerId) recalcStats(); } }; else card.onclick = () => { currentBrawlerId = id; recalcStats(); player.maxHp = currentStats.maxHp; player.hp = currentStats.maxHp; saveGame(); renderShop(); }; container.appendChild(card); } let b = brawlersCatalog[currentBrawlerId]; let cost = b.level<b.maxLevel ? b.upgradeCost[b.level-1] : "MAX"; document.getElementById('upgradeCostSpan').innerText = cost; } renderShop(); document.getElementById('upgradeBtnMenu').onclick = () => { upgradeBrawler(); renderShop(); saveGame(); if(!gameOver) player.maxHp = currentStats.maxHp, player.hp = Math.min(player.hp, currentStats.maxHp); }; document.getElementById('skinShopBtn').onclick = () => { showSkinShop(); }; document.getElementById('mapBtn').onclick = () => { showMapMenu(); }; document.getElementById('achBtn').onclick = () => { showAchievements(); }; document.getElementById('closeShop').onclick = () => div.remove(); }
+        function showMainMenu() { let menuDiv = document.createElement('div'); menuDiv.className = 'menu-screen'; menuDiv.innerHTML = `<div class="menu-card"><h2>⚔️ BRAWL STARS ULTRA</h2><button class="btn" id="resumeBtn">Продолжить</button><button class="btn" id="resetArenaBtn">Перезапуск арены</button><button class="btn" id="brawlersBtn">Персонажи & прокачка</button><button class="btn" id="skinShopMainBtn">🎨 Магазин скинов (за монеты)</button><button class="btn" id="mapMainBtn">🗺️ Выбор карты (10)</button><button class="btn" id="achMainBtn">🏆 Достижения</button><button class="btn" id="saveGameBtn">Сохранить</button><button class="btn close-btn" id="closeMenuBtn">Закрыть</button></div>`; document.body.appendChild(menuDiv); document.getElementById('resumeBtn').onclick = () => menuDiv.remove(); document.getElementById('resetArenaBtn').onclick = () => { resetGameArena(); menuDiv.remove(); }; document.getElementById('brawlersBtn').onclick = () => { showBrawlerMenu(); menuDiv.remove(); }; document.getElementById('skinShopMainBtn').onclick = () => { showSkinShop(); menuDiv.remove(); }; document.getElementById('mapMainBtn').onclick = () => { showMapMenu(); menuDiv.remove(); }; document.getElementById('achMainBtn').onclick = () => { showAchievements(); menuDiv.remove(); }; document.getElementById('saveGameBtn').onclick = () => { saveGame(); alert("Сохранено!"); }; document.getElementById('closeMenuBtn').onclick = () => menuDiv.remove(); }
+        
+        function saveGame() {
+            let save = { gems, coins, ownedBrawlers, currentBrawlerId, wave, enemiesToSpawn, score, ownedSkins, currentSkin, currentMapId, achievements, brawlersCatalogLevels: {} };
+            for(let id in brawlersCatalog) save.brawlersCatalogLevels[id] = brawlersCatalog[id].level;
+            localStorage.setItem("brawlUltraSave", JSON.stringify(save));
+        }
+        function loadGame() {
+            let data = localStorage.getItem("brawlUltraSave");
+            if(data) {
+                let s = JSON.parse(data);
+                gems = s.gems; coins = s.coins; ownedBrawlers = s.ownedBrawlers; currentBrawlerId = s.currentBrawlerId;
+                wave = s.wave || 1; enemiesToSpawn = s.enemiesToSpawn || 5; score = s.score || 0;
+                if(s.ownedSkins) ownedSkins = s.ownedSkins;
+                if(s.currentSkin) currentSkin = s.currentSkin;
+                if(s.currentMapId) currentMapId = s.currentMapId;
+                if(s.achievements) achievements = s.achievements;
+                if(s.brawlersCatalogLevels) for(let id in s.brawlersCatalogLevels) if(brawlersCatalog[id]) brawlersCatalog[id].level = s.brawlersCatalogLevels[id];
+                recalcStats();
+                updateUI();
+            } else { recalcStats(); updateUI(); }
+            resetGameArena();
+            // ежедневная награда
+            let lastDate = localStorage.getItem("brawlDailyDate");
+            let today = new Date().toDateString();
+            if(lastDate !== today) { let rc = 500+Math.random()*500, rg = 20+Math.random()*30; coins+=rc; gems+=rg; localStorage.setItem("brawlDailyDate", today); updateUI(); showFloatingText(`🎁 Ежедневная награда! +${Math.floor(rg)}⭐ +${Math.floor(rc)}🪙`, canvas.width/2, 80); saveGame(); }
+        }
+        
+        // управление
+        window.addEventListener('keydown', (e) => { let code = e.code; if(code === 'KeyW') keys.w = true; if(code === 'KeyA') keys.a = true; if(code === 'KeyS') keys.s = true; if(code === 'KeyD') keys.d = true; if(code === 'Escape') togglePause(); if(code === 'KeyR' && !paused && !gameOver) useUltra(); });
+        window.addEventListener('keyup', (e) => { let code = e.code; if(code === 'KeyW') keys.w = false; if(code === 'KeyA') keys.a = false; if(code === 'KeyS') keys.s = false; if(code === 'KeyD') keys.d = false; });
+        
+        let lastFrame = performance.now();
+        function gameLoop() { let now = performance.now(); let delta = Math.min(0.033, (now - lastFrame) / 1000); lastFrame = now; updateGame(delta); draw(); requestAnimationFrame(gameLoop); }
+        
+        document.getElementById('menuBtn').onclick = () => showMainMenu();
+        document.getElementById('pauseBtn').onclick = () => togglePause();
+        document.getElementById('chaosBoxBtn').onclick = () => openChaosDrop();
+        document.getElementById('ultraBoxBtn').onclick = () => openUltraDrop();
+        document.getElementById('omegaBoxBtn').onclick = () => openOmegaDrop();
+        document.getElementById('starBoxBtn').onclick = () => openStarDrop();
+        
+        loadGame();
+        gameLoop();
+    })();
+</script>
+</body>
+</html>
